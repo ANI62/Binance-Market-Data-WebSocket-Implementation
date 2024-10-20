@@ -1,0 +1,142 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binance Market Data</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: #34495e;
+            padding: 10px 0;
+        }
+        h1 {
+            margin: 0;
+        }
+        select {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #bdc3c7;
+        }
+        canvas {
+            margin-top: 20px;
+            width: 80%;
+            max-width: 800px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Binance Market Data Chart</h1>
+    </header>
+    <select id="coinSelect">
+        <option value="ethusdt">ETH/USDT</option>
+        <option value="bnbusdt">BNB/USDT</option>
+        <option value="dotusdt">DOT/USDT</option>
+    </select>
+    <select id="intervalSelect">
+        <option value="1m">1 Minute</option>
+        <option value="3m">3 Minutes</option>
+        <option value="5m">5 Minutes</option>
+    </select>
+    <canvas id="myChart"></canvas>
+    <script>
+        let myChart;
+        const chartData = {};
+        const localStorageKey = 'binanceChartData';
+
+        function createChart() {
+            const ctx = document.getElementById('myChart').getContext('2d');
+            myChart = new Chart(ctx, {
+                type: 'candlestick',
+                data: {
+                    datasets: [{
+                        label: 'Candlestick Chart',
+                        data: [],
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: true },
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { unit: 'minute' },
+                            adapters: {
+                                date: {
+                                    locale: window.navigator.language
+                                }
+                            }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            ticks: { precision: 2 },
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateChart(coin, interval) {
+            const key = `${coin}_${interval}`;
+            const data = chartData[key] || [];
+            if (myChart) {
+                myChart.data.datasets[0].data = data;
+                myChart.update();
+            }
+        }
+
+        function connectWebSocket(coin, interval) {
+            const wsUrl = `wss://stream.binance.com:9443/ws/${coin}@kline_${interval}`;
+            const ws = new WebSocket(wsUrl);
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                const { o, h, l, c, t } = message.k;
+                const candle = {
+                    x: new Date(t),
+                    o: parseFloat(o),
+                    h: parseFloat(h),
+                    l: parseFloat(l),
+                    c: parseFloat(c)
+                };
+                const key = `${coin}_${interval}`;
+                if (!chartData[key]) chartData[key] = [];
+                chartData[key].push(candle);
+                updateChart(coin, interval);
+            };
+            ws.onerror = (error) => console.error('WebSocket Error:', error);
+        }
+
+        function handleSelection() {
+            const coin = document.getElementById('coinSelect').value.toLowerCase();
+            const interval = document.getElementById('intervalSelect').value;
+            updateChart(coin, interval);
+            connectWebSocket(coin, interval);
+        }
+
+        window.onload = () => {
+            createChart();
+            document.getElementById('coinSelect').addEventListener('change', handleSelection);
+            document.getElementById('intervalSelect').addEventListener('change', handleSelection);
+            handleSelection();
+        };
+    </script>
+</body>
+</html>
